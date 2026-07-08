@@ -1,0 +1,81 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+@theme {
+  --font-sans: "Inter", system-ui, "Segoe UI", Roboto, sans-serif;
+
+  --color-brand-50: #f4f2ff;
+  --color-brand-100: #ece7ff;
+  --color-brand-200: #d9d0ff;
+  --color-brand-300: #bcaaff;
+  --color-brand-400: #9b7cff;
+  --color-brand-500: #7c4dff;
+  --color-brand-600: #6929f2;
+  --color-brand-700: #571fce;
+  --color-brand-800: #451aa3;
+  --color-brand-900: #391a80;
+
+  --color-ink-50: #f7f7f9;
+  --color-ink-100: #eceef1;
+  --color-ink-200: #d7dae1;
+  --color-ink-300: #b3b9c4;
+  --color-ink-400: #8890a0;
+  --color-ink-500: #666f82;
+  --color-ink-600: #4f5768;
+  --color-ink-700: #3d4353;
+  --color-ink-800: #262a36;
+  --color-ink-900: #14161d;
+  --color-ink-950: #0b0c11;
+}
+
+:root {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+  }
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-ink-50);
+  color: var(--color-ink-900);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+:root[data-theme="dark"] body {
+  background: var(--color-ink-950);
+  color: var(--color-ink-100);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) body {
+    background: var(--color-ink-950);
+    color: var(--color-ink-100);
+  }
+}
+
+.glass {
+  background: color-mix(in srgb, var(--color-ink-50) 60%, transparent);
+  backdrop-filter: blur(16px);
+  border: 1px solid color-mix(in srgb, var(--color-ink-300) 40%, transparent);
+}
+
+:root[data-theme="dark"] .glass {
+  background: color-mix(in srgb, var(--color-ink-900) 55%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-ink-700) 60%, transparent);
+}
