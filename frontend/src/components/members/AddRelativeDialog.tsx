@@ -54,7 +54,7 @@ export function AddRelativeDialog({
     onDone()
   }
 
-  async function handleCreateNew(values: MemberFormValues) {
+  async function handleCreateNew(values: MemberFormValues | FormData) {
     const created = await membersApi.create(treeId, values)
     await linkRelative(created.id)
   }

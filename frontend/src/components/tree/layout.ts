@@ -26,20 +26,59 @@ export function toFlowElements(
 
   const edges: Edge[] = graphEdges
     .filter((e) => visibleIds.has(e.from_member) && visibleIds.has(e.to_member))
-    .map((e) => ({
-      id: e.id,
-      source: e.from_member,
-      target: e.to_member,
-      type: 'smoothstep',
-      animated: false,
-      style:
-        e.kind === 'spouse'
-          ? { stroke: 'var(--color-brand-400)', strokeDasharray: '4 3' }
-          : { stroke: 'var(--color-ink-300)' },
-      data: { kind: e.kind },
-    }))
+    .map((e) =>
+      e.kind === 'spouse'
+        ? {
+            id: e.id,
+            source: e.from_member,
+            target: e.to_member,
+            // sourceHandle/targetHandle (left vs right) are assigned after
+            // layout, once we know which partner actually ended up on which
+            // side — see assignSpouseHandles below.
+            type: 'straight',
+            animated: false,
+            label: '♥',
+            labelStyle: { fill: 'var(--color-brand-500)', fontSize: 14 },
+            labelBgStyle: { fill: 'transparent' },
+            style: { stroke: 'var(--color-brand-300)' },
+            data: { kind: e.kind },
+          }
+        : {
+            id: e.id,
+            source: e.from_member,
+            target: e.to_member,
+            sourceHandle: 'bottom',
+            targetHandle: 'top',
+            type: 'smoothstep',
+            animated: false,
+            style: { stroke: 'var(--color-ink-300)' },
+            data: { kind: e.kind },
+          },
+    )
 
   return { nodes, edges }
+}
+
+/**
+ * Spouse edges connect via dedicated left/right handles so the line renders
+ * as a clean straight connector between adjacent partners (matching how a
+ * real family-tree chart draws couples) instead of routing through the
+ * top/bottom handles used for parent/child edges. Which side each partner
+ * uses depends on which one ended up left/right after layout, so this runs
+ * after node positions are computed.
+ */
+export function assignSpouseHandles(nodes: Node[], edges: Edge[], layout: TreeLayout): Edge[] {
+  if (layout !== 'vertical') return edges
+  const xById = new Map(nodes.map((n) => [n.id, n.position.x]))
+
+  return edges.map((edge) => {
+    if (edge.data?.kind !== 'spouse') return edge
+    const sourceX = xById.get(edge.source) ?? 0
+    const targetX = xById.get(edge.target) ?? 0
+    return sourceX <= targetX
+      ? { ...edge, sourceHandle: 'right', targetHandle: 'left' }
+      : { ...edge, sourceHandle: 'left', targetHandle: 'right' }
+  })
 }
 
 /**

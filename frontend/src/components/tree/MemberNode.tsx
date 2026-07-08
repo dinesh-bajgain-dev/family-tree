@@ -1,5 +1,6 @@
 import { Handle, Position, type NodeProps } from '@xyflow/react'
 import type { FamilyMember } from '../../types'
+import { initials } from '../../lib/initials'
 
 export interface MemberNodeData {
   member: FamilyMember
@@ -10,15 +11,6 @@ export interface MemberNodeData {
   onToggleCollapse?: (memberId: string) => void
   onSelect?: (memberId: string) => void
   [key: string]: unknown
-}
-
-function initials(name: string) {
-  return name
-    .split(' ')
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase())
-    .join('')
 }
 
 export function MemberNode({ data }: NodeProps) {
@@ -32,7 +24,9 @@ export function MemberNode({ data }: NodeProps) {
         isHighlighted ? 'ring-2 ring-brand-500' : ''
       } ${isSelected ? 'ring-2 ring-amber-400' : ''}`}
     >
-      <Handle type="target" position={Position.Top} className="!bg-ink-300" />
+      <Handle type="target" position={Position.Top} id="top" className="!bg-ink-300" />
+      <Handle type="target" position={Position.Left} id="left" className="!bg-ink-300" />
+      <Handle type="source" position={Position.Right} id="right" className="!bg-ink-300" />
       <div className="flex items-center gap-3">
         <div
           className={`flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full text-sm font-semibold ${
@@ -68,7 +62,7 @@ export function MemberNode({ data }: NodeProps) {
           {isCollapsed ? '+' : '−'}
         </button>
       )}
-      <Handle type="source" position={Position.Bottom} className="!bg-ink-300" />
+      <Handle type="source" position={Position.Bottom} id="bottom" className="!bg-ink-300" />
     </div>
   )
 }

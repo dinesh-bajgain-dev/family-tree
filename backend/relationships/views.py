@@ -36,7 +36,7 @@ class TreeGraphView(APIView):
         members = FamilyMember.objects.filter(tree=tree)
         relationships = Relationship.objects.filter(tree=tree)
 
-        nodes = FamilyMemberSerializer(members, many=True).data
+        nodes = FamilyMemberSerializer(members, many=True, context={'request': request}).data
         edges = [
             {
                 'id': str(rel.id),

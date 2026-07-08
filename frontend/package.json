@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@hookform/resolvers": "^5.4.0",
+    "@remotemerge/nepali-date-converter": "^1.2.0",
     "@tailwindcss/vite": "^4.3.2",
     "@xyflow/react": "^12.11.1",
     "axios": "^1.18.1",

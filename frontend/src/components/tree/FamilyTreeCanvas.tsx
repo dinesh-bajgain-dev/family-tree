@@ -11,7 +11,7 @@ import {
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import type { TreeGraph } from '../../types'
-import { applyDagreLayout, toFlowElements, type TreeLayout } from './layout'
+import { applyDagreLayout, assignSpouseHandles, toFlowElements, type TreeLayout } from './layout'
 import { MemberNode } from './MemberNode'
 import { relationshipsApi } from '../../lib/treeApi'
 import { Button } from '../ui/Button'
@@ -84,7 +84,7 @@ function TreeCanvasInner({ treeId, graph, onSelectMember }: FamilyTreeCanvasProp
     const { nodes: flowNodes, edges: flowEdges } = toFlowElements(graph.nodes, graph.edges, hiddenMemberIds)
     const positioned = applyDagreLayout(flowNodes, flowEdges, layout)
     setNodes(positioned)
-    setEdges(flowEdges)
+    setEdges(assignSpouseHandles(positioned, flowEdges, layout))
     const timeout = setTimeout(() => fitView({ padding: 0.2, duration: 300 }), 350)
     return () => clearTimeout(timeout)
     // eslint-disable-next-line react-hooks/exhaustive-deps

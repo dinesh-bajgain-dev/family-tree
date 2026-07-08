@@ -19,9 +19,9 @@ export const treesApi = {
 export const membersApi = {
   list: (treeId: string) =>
     api.get<FamilyMember[]>(`/trees/${treeId}/members/`).then((r) => r.data),
-  create: (treeId: string, data: Partial<FamilyMember>) =>
+  create: (treeId: string, data: Partial<FamilyMember> | FormData) =>
     api.post<FamilyMember>(`/trees/${treeId}/members/`, data).then((r) => r.data),
-  update: (treeId: string, memberId: string, data: Partial<FamilyMember>) =>
+  update: (treeId: string, memberId: string, data: Partial<FamilyMember> | FormData) =>
     api.patch<FamilyMember>(`/trees/${treeId}/members/${memberId}/`, data).then((r) => r.data),
   remove: (treeId: string, memberId: string) =>
     api.delete(`/trees/${treeId}/members/${memberId}/`),

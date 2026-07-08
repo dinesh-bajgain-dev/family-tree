@@ -7,6 +7,8 @@ import { Button } from '../components/ui/Button'
 import { Modal } from '../components/ui/Modal'
 import { MemberForm, type MemberFormValues } from '../components/members/MemberForm'
 
+type MemberSubmitValues = MemberFormValues | FormData
+
 export function TreeViewPage() {
   const { treeId } = useParams<{ treeId: string }>()
   const navigate = useNavigate()
@@ -26,7 +28,7 @@ export function TreeViewPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [treeId])
 
-  async function handleAddMember(values: MemberFormValues) {
+  async function handleAddMember(values: MemberSubmitValues) {
     if (!treeId) return
     await membersApi.create(treeId, values)
     setIsAddingMember(false)

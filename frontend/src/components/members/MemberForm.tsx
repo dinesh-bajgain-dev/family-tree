@@ -1,8 +1,11 @@
-import { useForm } from 'react-hook-form'
+import { useState, type ChangeEvent } from 'react'
+import { Controller, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import type { FamilyMember } from '../../types'
+import { initials } from '../../lib/initials'
 import { Button } from '../ui/Button'
+import { DateField } from '../ui/DateField'
 import { Input, Select, Textarea } from '../ui/Input'
 
 const memberSchema = z.object({
@@ -27,13 +30,27 @@ export type MemberFormValues = z.infer<typeof memberSchema>
 
 interface MemberFormProps {
   initialValues?: Partial<FamilyMember>
-  onSubmit: (values: MemberFormValues) => Promise<void>
+  onSubmit: (values: MemberFormValues | FormData) => Promise<void>
   submitLabel?: string
 }
 
 export function MemberForm({ initialValues, onSubmit, submitLabel = 'Save' }: MemberFormProps) {
+  const [photoFile, setPhotoFile] = useState<File | null>(null)
+  const [photoPreview, setPhotoPreview] = useState<string | null>(initialValues?.profile_photo ?? null)
+
+  function handlePhotoChange(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setPhotoFile(file)
+    setPhotoPreview((prev) => {
+      if (prev?.startsWith('blob:')) URL.revokeObjectURL(prev)
+      return URL.createObjectURL(file)
+    })
+  }
+
   const {
     register,
+    control,
     handleSubmit,
     watch,
     formState: { errors, isSubmitting },
@@ -59,17 +76,42 @@ export function MemberForm({ initialValues, onSubmit, submitLabel = 'Save' }: Me
   })
 
   const isLiving = watch('is_living')
+  const fullName = watch('full_name')
 
   function submitWithNormalizedDates(values: MemberFormValues) {
-    return onSubmit({
+    const normalized = {
       ...values,
       date_of_birth: values.date_of_birth || undefined,
       date_of_death: values.date_of_death || undefined,
-    })
+    }
+
+    if (!photoFile) return onSubmit(normalized)
+
+    const formData = new FormData()
+    for (const [key, value] of Object.entries(normalized)) {
+      if (value === undefined || value === null) continue
+      formData.append(key, typeof value === 'boolean' ? String(value) : value)
+    }
+    formData.append('profile_photo', photoFile)
+    return onSubmit(formData)
   }
 
   return (
     <form onSubmit={handleSubmit(submitWithNormalizedDates)} className="flex flex-col gap-4">
+      <div className="flex items-center gap-4">
+        <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full bg-brand-100 text-lg font-semibold text-brand-700 dark:bg-brand-900/50 dark:text-brand-300">
+          {photoPreview ? (
+            <img src={photoPreview} alt="" className="h-full w-full object-cover" />
+          ) : (
+            initials(fullName || '?')
+          )}
+        </div>
+        <label className="cursor-pointer text-sm font-medium text-brand-600 hover:underline">
+          {photoPreview ? 'Change photo' : 'Upload photo'}
+          <input type="file" accept="image/*" onChange={handlePhotoChange} className="hidden" />
+        </label>
+      </div>
+
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Input label="Full name" required {...register('full_name')} error={errors.full_name?.message} />
         <Input label="Nickname" {...register('nickname')} />
@@ -79,7 +121,13 @@ export function MemberForm({ initialValues, onSubmit, submitLabel = 'Save' }: Me
           <option value="female">Female</option>
           <option value="other">Other</option>
         </Select>
-        <Input label="Date of birth" type="date" {...register('date_of_birth')} />
+        <Controller
+          name="date_of_birth"
+          control={control}
+          render={({ field }) => (
+            <DateField label="Date of birth" value={field.value} onChange={field.onChange} />
+          )}
+        />
         <Input label="Place of birth" {...register('place_of_birth')} />
         <Input label="Nationality" {...register('nationality')} />
         <Input label="Occupation" {...register('occupation')} />
@@ -104,7 +152,13 @@ export function MemberForm({ initialValues, onSubmit, submitLabel = 'Save' }: Me
 
       {!isLiving && (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Input label="Date of death" type="date" {...register('date_of_death')} />
+          <Controller
+            name="date_of_death"
+            control={control}
+            render={({ field }) => (
+              <DateField label="Date of death" value={field.value} onChange={field.onChange} />
+            )}
+          />
           <Input label="Burial / cremation location" {...register('burial_location')} />
         </div>
       )}

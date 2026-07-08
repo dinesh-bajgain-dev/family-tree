@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import type { TreeGraph } from '../types'
 import { graphApi, membersApi, relationshipsApi } from '../lib/treeApi'
+import { adToBs, BS_MONTH_NAMES } from '../lib/nepaliDate'
+import { initials } from '../lib/initials'
 import { Card } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
 import { Modal } from '../components/ui/Modal'
@@ -11,6 +13,13 @@ import { AddRelativeDialog } from '../components/members/AddRelativeDialog'
 const RELATION_LABELS: Record<string, string> = {
   parent_child: 'Parent / Child',
   spouse: 'Spouse',
+}
+
+function bsLabel(adIso?: string | null): string | undefined {
+  if (!adIso) return undefined
+  const bs = adToBs(adIso)
+  if (!bs) return undefined
+  return `BS ${bs.date} ${BS_MONTH_NAMES[bs.month - 1]} ${bs.year}`
 }
 
 export function MemberProfilePage() {
@@ -49,7 +58,7 @@ export function MemberProfilePage() {
     })
     .filter((r) => r.other)
 
-  async function handleUpdate(values: MemberFormValues) {
+  async function handleUpdate(values: MemberFormValues | FormData) {
     await membersApi.update(treeId!, memberId!, values)
     setIsEditing(false)
     await refresh()
@@ -75,9 +84,18 @@ export function MemberProfilePage() {
 
       <Card className="p-6">
         <div className="mb-4 flex items-start justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold">{member.full_name}</h1>
-            {member.nickname && <p className="text-sm text-ink-500">"{member.nickname}"</p>}
+          <div className="flex items-center gap-4">
+            <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full bg-brand-100 text-lg font-semibold text-brand-700 dark:bg-brand-900/50 dark:text-brand-300">
+              {member.profile_photo ? (
+                <img src={member.profile_photo} alt="" className="h-full w-full object-cover" />
+              ) : (
+                initials(member.full_name || '?')
+              )}
+            </div>
+            <div>
+              <h1 className="text-2xl font-semibold">{member.full_name}</h1>
+              {member.nickname && <p className="text-sm text-ink-500">"{member.nickname}"</p>}
+            </div>
           </div>
           <div className="flex gap-2">
             <Button variant="secondary" onClick={() => setIsEditing(true)}>
@@ -91,7 +109,7 @@ export function MemberProfilePage() {
 
         <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm sm:grid-cols-3">
           <Field label="Gender" value={member.gender} />
-          <Field label="Born" value={member.date_of_birth} />
+          <Field label="Born" value={member.date_of_birth} hint={bsLabel(member.date_of_birth)} />
           <Field label="Place of birth" value={member.place_of_birth} />
           <Field label="Nationality" value={member.nationality} />
           <Field label="Occupation" value={member.occupation} />
@@ -99,7 +117,9 @@ export function MemberProfilePage() {
           <Field label="Blood group" value={member.blood_group} />
           <Field label="Religion" value={member.religion} />
           <Field label="Status" value={member.is_living ? 'Living' : 'Deceased'} />
-          {!member.is_living && <Field label="Date of death" value={member.date_of_death} />}
+          {!member.is_living && (
+            <Field label="Date of death" value={member.date_of_death} hint={bsLabel(member.date_of_death)} />
+          )}
           {!member.is_living && <Field label="Burial location" value={member.burial_location} />}
         </dl>
 
@@ -164,12 +184,15 @@ export function MemberProfilePage() {
   )
 }
 
-function Field({ label, value }: { label: string; value?: string | null }) {
+function Field({ label, value, hint }: { label: string; value?: string | null; hint?: string }) {
   if (!value) return null
   return (
     <div>
       <dt className="text-xs uppercase tracking-wide text-ink-400">{label}</dt>
-      <dd className="text-ink-800 dark:text-ink-200">{value}</dd>
+      <dd className="text-ink-800 dark:text-ink-200">
+        {value}
+        {hint && <span className="ml-1.5 text-xs text-ink-400">({hint})</span>}
+      </dd>
     </div>
   )
 }
