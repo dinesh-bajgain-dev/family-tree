@@ -53,8 +53,13 @@ File: `backend/.env` (copy from `backend/.env.example` if missing). Loaded via `
 | `DB_HOST` | Postgres host. | `localhost` |
 | `DB_PORT` | Postgres port. | `5432` |
 | `CORS_ALLOWED_ORIGINS` | Comma-separated origins allowed to call the API from the browser (must match the frontend's dev server URL). | `http://localhost:5173,http://127.0.0.1:5173` |
+| `CLOUDINARY_CLOUD_NAME` | Optional. Leave blank to store uploaded photos (profile photos, tree cover images) on local disk under `backend/media/` — fine for local dev. Set this (and the two below) to upload to [Cloudinary](https://cloudinary.com/console) instead. | *(empty = local disk)* |
+| `CLOUDINARY_API_KEY` | Cloudinary API key, from the same dashboard. Required only if `CLOUDINARY_CLOUD_NAME` is set. | *(empty)* |
+| `CLOUDINARY_API_SECRET` | Cloudinary API secret. Required only if `CLOUDINARY_CLOUD_NAME` is set. | *(empty)* |
 
 If you ever need to connect with a *different* Postgres user/password (e.g. a teammate's setup, or a managed Postgres instance), just change `DB_USER`/`DB_PASSWORD`/`DB_HOST`/`DB_PORT` here — no code changes needed, Django reads these directly.
+
+**Enabling Cloudinary:** sign up for a free account at cloudinary.com, copy the Cloud name / API Key / API Secret from your dashboard's "API Keys" section into `backend/.env`, then restart `manage.py runserver`. All three must be set together — if `CLOUDINARY_CLOUD_NAME` is blank, uploads fall back to local disk regardless of the other two. No code or model changes needed either way; `FamilyMember.profile_photo` and `FamilyTree.cover_image` just start resolving to Cloudinary URLs instead of `/media/...` ones.
 
 ## 3. Frontend `.env` variables
 
