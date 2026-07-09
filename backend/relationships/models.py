@@ -7,14 +7,20 @@ from trees.models import FamilyTree
 
 
 class Relationship(models.Model):
-    """A base-fact edge in the family graph. Extended relations (sibling,
-    grandparent, cousin, etc.) are derived at read time by graph traversal
-    in relationships/services.py rather than stored here.
+    """A base-fact edge in the family graph. Most extended relations
+    (grandparent, aunt/uncle, cousin, and ordinarily sibling too) are derived
+    at read time by graph traversal in relationships/services.py rather than
+    stored here. SIBLING is the one exception: it can be recorded directly
+    for cases where the shared parents aren't known/entered, so two people
+    can still be linked as siblings without inventing a placeholder parent.
+    When parents ARE known, sibling status is derived from them as usual and
+    a direct SIBLING edge isn't needed.
     """
 
     class Kind(models.TextChoices):
         PARENT_CHILD = 'parent_child', 'Parent / Child'
         SPOUSE = 'spouse', 'Spouse'
+        SIBLING = 'sibling', 'Sibling'
 
     class ParentLinkType(models.TextChoices):
         BIOLOGICAL = 'biological', 'Biological'

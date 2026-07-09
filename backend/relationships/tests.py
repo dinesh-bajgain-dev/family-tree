@@ -58,10 +58,10 @@ class RelationshipEngineTests(TestCase):
         link_parent_child(self.mom, self.sibling)
         link_parent_child(self.aunt, self.cousin)
 
-        self.parents_of, self.children_of, self.spouses_of = build_graph(self.tree)
+        self.parents_of, self.children_of, self.spouses_of, self.siblings_of = build_graph(self.tree)
 
     def relation(self, a, b):
-        return compute_relationship(a.id, b.id, self.parents_of, self.spouses_of)
+        return compute_relationship(a.id, b.id, self.parents_of, self.spouses_of, self.siblings_of)
 
     def test_direct_parent_and_child(self):
         self.assertEqual(self.relation(self.me, self.dad), 'parent')
@@ -94,13 +94,13 @@ class RelationshipEngineTests(TestCase):
             from_member=self.mom, to_member=stepchild,
             parent_link_type=Relationship.ParentLinkType.BIOLOGICAL,
         )
-        parents_of, children_of, spouses_of = build_graph(self.tree)
+        parents_of, children_of, spouses_of, siblings_of = build_graph(self.tree)
         self.assertEqual(
-            compute_relationship(stepchild.id, self.dad.id, parents_of, spouses_of),
+            compute_relationship(stepchild.id, self.dad.id, parents_of, spouses_of, siblings_of),
             'step-parent',
         )
         self.assertEqual(
-            compute_relationship(self.dad.id, stepchild.id, parents_of, spouses_of),
+            compute_relationship(self.dad.id, stepchild.id, parents_of, spouses_of, siblings_of),
             'step-child',
         )
 
@@ -110,7 +110,7 @@ class RelationshipEngineTests(TestCase):
 
     def test_relationship_path_between_cousins(self):
         path = find_relationship_path(
-            self.me.id, self.cousin.id, self.parents_of, self.children_of, self.spouses_of
+            self.me.id, self.cousin.id, self.parents_of, self.children_of, self.spouses_of, self.siblings_of
         )
         # Me -> Dad -> Grandpa -> Aunt -> Cousin (or via Grandma), length 5
         self.assertIsNotNone(path)
@@ -145,3 +145,48 @@ class RelationshipDuplicatePreventionTests(APITestCase):
         )
         self.assertEqual(reversed_duplicate.status_code, 400)
         self.assertEqual(Relationship.objects.filter(kind='spouse').count(), 1)
+
+    def test_contradictory_kind_between_same_pair_is_rejected(self):
+        first = self.client.post(
+            self.url,
+            {'kind': 'spouse', 'from_member': self.alice.id, 'to_member': self.bob.id, 'spouse_status': 'current'},
+        )
+        self.assertEqual(first.status_code, 201)
+
+        contradiction = self.client.post(
+            self.url, {'kind': 'sibling', 'from_member': self.alice.id, 'to_member': self.bob.id}
+        )
+        self.assertEqual(contradiction.status_code, 400)
+        self.assertEqual(Relationship.objects.filter(from_member=self.alice, to_member=self.bob).count(), 1)
+
+
+class DirectSiblingTests(APITestCase):
+    """Siblings are normally derived from shared parents, but two people can
+    also be linked directly as siblings when their parents aren't recorded."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(email='owner5@example.com', password='pw12345!')
+        self.client.force_authenticate(self.user)
+        self.tree = FamilyTree.objects.create(owner=self.user, name='Sibling Test Family')
+        self.alice = FamilyMember.objects.create(tree=self.tree, full_name='Alice')
+        self.bob = FamilyMember.objects.create(tree=self.tree, full_name='Bob')
+        self.url = f'/api/v1/trees/{self.tree.id}/relationships/'
+
+    def test_direct_sibling_link_and_relationship_path(self):
+        create = self.client.post(self.url, {'kind': 'sibling', 'from_member': self.alice.id, 'to_member': self.bob.id})
+        self.assertEqual(create.status_code, 201)
+
+        parents_of, children_of, spouses_of, siblings_of = build_graph(self.tree)
+        self.assertEqual(compute_relationship(self.alice.id, self.bob.id, parents_of, spouses_of, siblings_of), 'sibling')
+        self.assertEqual(compute_relationship(self.bob.id, self.alice.id, parents_of, spouses_of, siblings_of), 'sibling')
+
+        path = find_relationship_path(self.alice.id, self.bob.id, parents_of, children_of, spouses_of, siblings_of)
+        self.assertEqual(path, [self.alice.id, self.bob.id])
+
+    def test_siblings_of_param_is_optional(self):
+        # A caller that doesn't pass siblings_of (the pre-existing signature)
+        # should still work without error, just without direct-sibling
+        # detection — confirms the new parameter is backwards compatible.
+        Relationship.objects.create(tree=self.tree, kind=Relationship.Kind.SIBLING, from_member=self.alice, to_member=self.bob)
+        parents_of, _children_of, spouses_of, _siblings_of = build_graph(self.tree)
+        self.assertIsNone(compute_relationship(self.alice.id, self.bob.id, parents_of, spouses_of))

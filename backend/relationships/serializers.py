@@ -23,12 +23,20 @@ class RelationshipSerializer(serializers.ModelSerializer):
             if from_member.id == to_member.id:
                 raise serializers.ValidationError('A member cannot have a relationship with themselves.')
 
-            duplicate = Relationship.objects.filter(kind=kind).filter(
+            existing = Relationship.objects.filter(
                 Q(from_member=from_member, to_member=to_member)
                 | Q(from_member=to_member, to_member=from_member)
             )
             if self.instance:
-                duplicate = duplicate.exclude(pk=self.instance.pk)
-            if duplicate.exists():
+                existing = existing.exclude(pk=self.instance.pk)
+
+            if existing.filter(kind=kind).exists():
                 raise serializers.ValidationError('This relationship already exists between these two members.')
+
+            other_kind = existing.exclude(kind=kind).first()
+            if other_kind:
+                raise serializers.ValidationError(
+                    f'These two members are already linked as {other_kind.get_kind_display().lower()} — '
+                    'remove that relationship first if this is a correction.'
+                )
         return attrs

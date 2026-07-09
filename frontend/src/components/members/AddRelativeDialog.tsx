@@ -5,7 +5,7 @@ import { Button } from '../ui/Button'
 import { Select } from '../ui/Input'
 import { MemberForm, type MemberFormValues } from './MemberForm'
 
-type RelativeKind = 'parent' | 'child' | 'spouse'
+type RelativeKind = 'parent' | 'child' | 'spouse' | 'sibling'
 
 interface AddRelativeDialogProps {
   treeId: string
@@ -43,12 +43,18 @@ export function AddRelativeDialog({
         to_member: relativeMemberId,
         parent_link_type: parentLinkType,
       })
-    } else {
+    } else if (relativeKind === 'spouse') {
       await relationshipsApi.create(treeId, {
         kind: 'spouse',
         from_member: currentMember.id,
         to_member: relativeMemberId,
         spouse_status: spouseStatus,
+      })
+    } else {
+      await relationshipsApi.create(treeId, {
+        kind: 'sibling',
+        from_member: currentMember.id,
+        to_member: relativeMemberId,
       })
     }
     onDone()
@@ -73,9 +79,17 @@ export function AddRelativeDialog({
         <option value="parent">Parent</option>
         <option value="child">Child</option>
         <option value="spouse">Spouse / partner</option>
+        <option value="sibling">Sibling</option>
       </Select>
 
-      {relativeKind !== 'spouse' ? (
+      {relativeKind === 'sibling' && (
+        <p className="text-xs text-ink-500 dark:text-ink-400">
+          For siblings who share recorded parents, add those parents instead — this is only
+          the shared parents aren't known yet.
+        </p>
+      )}
+
+      {(relativeKind === 'parent' || relativeKind === 'child') && (
         <Select
           label="Link type"
           value={parentLinkType}
@@ -86,7 +100,9 @@ export function AddRelativeDialog({
           <option value="step">Step-parent</option>
           <option value="guardian">Guardian</option>
         </Select>
-      ) : (
+      )}
+
+      {relativeKind === 'spouse' && (
         <Select
           label="Marriage status"
           value={spouseStatus}

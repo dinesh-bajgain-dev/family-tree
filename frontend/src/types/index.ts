@@ -46,7 +46,7 @@ export interface FamilyMember {
   updated_at: string
 }
 
-export type RelationshipKind = 'parent_child' | 'spouse'
+export type RelationshipKind = 'parent_child' | 'spouse' | 'sibling'
 export type ParentLinkType = 'biological' | 'adopted' | 'step' | 'guardian' | ''
 export type SpouseStatus = 'current' | 'divorced' | 'deceased' | ''
 

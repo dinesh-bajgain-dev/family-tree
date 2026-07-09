@@ -69,7 +69,7 @@ class RelationshipPathView(APIView):
         except ValueError:
             return Response({'detail': 'from and to must be valid member ids.'}, status=400)
 
-        parents_of, children_of, spouses_of = build_graph(tree)
-        label = compute_relationship(from_id, to_id, parents_of, spouses_of)
-        path = find_relationship_path(from_id, to_id, parents_of, children_of, spouses_of)
+        parents_of, children_of, spouses_of, siblings_of = build_graph(tree)
+        label = compute_relationship(from_id, to_id, parents_of, spouses_of, siblings_of)
+        path = find_relationship_path(from_id, to_id, parents_of, children_of, spouses_of, siblings_of)
         return Response({'relationship': label, 'path': [str(p) for p in path] if path else path})
