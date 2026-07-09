@@ -25,8 +25,14 @@ export function MemberNode({ data }: NodeProps) {
       } ${isSelected ? 'ring-2 ring-amber-400' : ''}`}
     >
       <Handle type="target" position={Position.Top} id="top" className="!bg-ink-300" />
-      <Handle type="target" position={Position.Left} id="left" className="!bg-ink-300" />
-      <Handle type="source" position={Position.Right} id="right" className="!bg-ink-300" />
+      {/* Spouse connections need both a source and a target handle on each
+          side, since either partner may be edge.source/edge.target in the
+          data regardless of which one physically ends up left/right after
+          layout — see assignSpouseHandles in layout.ts. */}
+      <Handle type="target" position={Position.Left} id="left-target" className="!bg-ink-300" />
+      <Handle type="source" position={Position.Left} id="left-source" className="!bg-ink-300" />
+      <Handle type="source" position={Position.Right} id="right-source" className="!bg-ink-300" />
+      <Handle type="target" position={Position.Right} id="right-target" className="!bg-ink-300" />
       <div className="flex items-center gap-3">
         <div
           className={`flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full text-sm font-semibold ${

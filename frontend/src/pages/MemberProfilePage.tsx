@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import type { TreeGraph } from '../types'
-import { graphApi, membersApi, relationshipsApi } from '../lib/treeApi'
+import type { FamilyTree, TreeGraph } from '../types'
+import { graphApi, membersApi, relationshipsApi, treesApi } from '../lib/treeApi'
+import { useAuth } from '../context/AuthContext'
 import { adToBs, BS_MONTH_NAMES } from '../lib/nepaliDate'
 import { initials } from '../lib/initials'
 import { Card } from '../components/ui/Card'
@@ -25,13 +26,17 @@ function bsLabel(adIso?: string | null): string | undefined {
 export function MemberProfilePage() {
   const { treeId, memberId } = useParams<{ treeId: string; memberId: string }>()
   const navigate = useNavigate()
+  const { user } = useAuth()
+  const [tree, setTree] = useState<FamilyTree | null>(null)
   const [graph, setGraph] = useState<TreeGraph | null>(null)
   const [isEditing, setIsEditing] = useState(false)
   const [isAddingRelative, setIsAddingRelative] = useState(false)
 
   async function refresh() {
     if (!treeId) return
-    setGraph(await graphApi.get(treeId))
+    const [treeData, graphData] = await Promise.all([treesApi.get(treeId), graphApi.get(treeId)])
+    setTree(treeData)
+    setGraph(graphData)
   }
 
   useEffect(() => {
@@ -39,10 +44,12 @@ export function MemberProfilePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [treeId])
 
-  if (!graph || !treeId || !memberId) return <p className="text-sm text-ink-500">Loading…</p>
+  if (!tree || !graph || !treeId || !memberId) return <p className="text-sm text-ink-500">Loading…</p>
 
   const member = graph.nodes.find((m) => m.id === memberId)
   if (!member) return <p className="text-sm text-ink-500">Member not found.</p>
+
+  const isOwner = tree.owner === user?.id
 
   const memberById = new Map(graph.nodes.map((m) => [m.id, m]))
   const directRelations = graph.edges
@@ -97,14 +104,16 @@ export function MemberProfilePage() {
               {member.nickname && <p className="text-sm text-ink-500">"{member.nickname}"</p>}
             </div>
           </div>
-          <div className="flex gap-2">
-            <Button variant="secondary" onClick={() => setIsEditing(true)}>
-              Edit
-            </Button>
-            <Button variant="danger" onClick={handleDelete}>
-              Delete
-            </Button>
-          </div>
+          {isOwner && (
+            <div className="flex gap-2">
+              <Button variant="secondary" onClick={() => setIsEditing(true)}>
+                Edit
+              </Button>
+              <Button variant="danger" onClick={handleDelete}>
+                Delete
+              </Button>
+            </div>
+          )}
         </div>
 
         <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm sm:grid-cols-3">
@@ -133,7 +142,7 @@ export function MemberProfilePage() {
         <div className="mt-6">
           <div className="mb-2 flex items-center justify-between">
             <h3 className="text-sm font-semibold text-ink-700 dark:text-ink-200">Relatives</h3>
-            <Button onClick={() => setIsAddingRelative(true)}>+ Add relative</Button>
+            {isOwner && <Button onClick={() => setIsAddingRelative(true)}>+ Add relative</Button>}
           </div>
           {directRelations.length === 0 ? (
             <p className="text-sm text-ink-500">No relatives linked yet.</p>
@@ -151,13 +160,15 @@ export function MemberProfilePage() {
                     <span>{other!.full_name}</span>
                     <span className="mr-3 text-xs text-ink-400">{label}</span>
                   </Link>
-                  <button
-                    onClick={() => handleUnlinkRelative(edge.id, other!.full_name)}
-                    aria-label={`Remove ${other!.full_name} as a relative`}
-                    className="rounded-full p-1 text-ink-400 hover:bg-ink-100 hover:text-red-500 dark:hover:bg-ink-800"
-                  >
-                    ✕
-                  </button>
+                  {isOwner && (
+                    <button
+                      onClick={() => handleUnlinkRelative(edge.id, other!.full_name)}
+                      aria-label={`Remove ${other!.full_name} as a relative`}
+                      className="rounded-full p-1 text-ink-400 hover:bg-ink-100 hover:text-red-500 dark:hover:bg-ink-800"
+                    >
+                      ✕
+                    </button>
+                  )}
                 </li>
               ))}
             </ul>
@@ -165,21 +176,25 @@ export function MemberProfilePage() {
         </div>
       </Card>
 
-      <Modal open={isEditing} onClose={() => setIsEditing(false)} title="Edit member">
-        <MemberForm initialValues={member} onSubmit={handleUpdate} submitLabel="Save changes" />
-      </Modal>
+      {isOwner && (
+        <>
+          <Modal open={isEditing} onClose={() => setIsEditing(false)} title="Edit member">
+            <MemberForm initialValues={member} onSubmit={handleUpdate} submitLabel="Save changes" />
+          </Modal>
 
-      <Modal open={isAddingRelative} onClose={() => setIsAddingRelative(false)} title="Add a relative">
-        <AddRelativeDialog
-          treeId={treeId}
-          currentMember={member}
-          existingMembers={graph.nodes}
-          onDone={() => {
-            setIsAddingRelative(false)
-            refresh()
-          }}
-        />
-      </Modal>
+          <Modal open={isAddingRelative} onClose={() => setIsAddingRelative(false)} title="Add a relative">
+            <AddRelativeDialog
+              treeId={treeId}
+              currentMember={member}
+              existingMembers={graph.nodes}
+              onDone={() => {
+                setIsAddingRelative(false)
+                refresh()
+              }}
+            />
+          </Modal>
+        </>
+      )}
     </div>
   )
 }

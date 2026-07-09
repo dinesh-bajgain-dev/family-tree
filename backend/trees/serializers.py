@@ -14,3 +14,9 @@ class FamilyTreeSerializer(serializers.ModelSerializer):
             'member_count', 'created_at', 'updated_at',
         )
         read_only_fields = ('id', 'owner', 'created_at', 'updated_at')
+
+    def validate(self, attrs):
+        request = self.context.get('request')
+        if request and not self.instance and FamilyTree.objects.filter(owner=request.user).exists():
+            raise serializers.ValidationError('You already have a family tree. Each account may only own one.')
+        return attrs

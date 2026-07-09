@@ -11,13 +11,20 @@ import {
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import type { TreeGraph } from '../../types'
-import { applyDagreLayout, assignSpouseHandles, toFlowElements, type TreeLayout } from './layout'
+import {
+  applyDagreLayout,
+  assignSpouseHandles,
+  buildJunctionElements,
+  toFlowElements,
+  type TreeLayout,
+} from './layout'
 import { MemberNode } from './MemberNode'
+import { JunctionNode } from './JunctionNode'
 import { relationshipsApi } from '../../lib/treeApi'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
 
-const nodeTypes = { member: MemberNode }
+const nodeTypes = { member: MemberNode, junction: JunctionNode }
 
 interface FamilyTreeCanvasProps {
   treeId: string
@@ -41,6 +48,27 @@ function descendantsOf(memberId: string, graph: TreeGraph): Set<string> {
     queue.push(...(childrenOf.get(current) ?? []))
   }
   return result
+}
+
+/**
+ * Whether an edge represents a step on the highlighted relationship path.
+ * Spouse edges (and horizontal-layout parent/child edges, which still
+ * connect real members directly) check source/target membership as before.
+ * Vertical-layout parent/child edges route through invisible junction nodes
+ * instead of a real member (see buildJunctionElements), so those check
+ * whether any of the edge's recorded parents AND any of its recorded
+ * children are on the path — covering both the per-child fan-out edges and
+ * the shared parent-drop->bus-center stub edge, which lists every sibling in
+ * the group rather than a single target.
+ */
+function isEdgeOnPath(edge: Edge, path: string[] | undefined): boolean {
+  if (!path) return false
+  const parentIds = edge.data?.parentIds
+  const childIds = edge.data?.childIds
+  if (Array.isArray(parentIds) && Array.isArray(childIds)) {
+    return childIds.some((c) => path.includes(c)) && parentIds.some((p) => path.includes(p))
+  }
+  return path.includes(edge.source) && path.includes(edge.target)
 }
 
 function TreeCanvasInner({ treeId, graph, onSelectMember }: FamilyTreeCanvasProps) {
@@ -83,8 +111,22 @@ function TreeCanvasInner({ treeId, graph, onSelectMember }: FamilyTreeCanvasProp
   useEffect(() => {
     const { nodes: flowNodes, edges: flowEdges } = toFlowElements(graph.nodes, graph.edges, hiddenMemberIds)
     const positioned = applyDagreLayout(flowNodes, flowEdges, layout)
-    setNodes(positioned)
-    setEdges(assignSpouseHandles(positioned, flowEdges, layout))
+    const handledEdges = assignSpouseHandles(positioned, flowEdges, layout)
+
+    if (layout === 'vertical') {
+      const spouseEdges = handledEdges.filter((e) => e.data?.kind === 'spouse')
+      const { junctionNodes, edges: parentChildEdges } = buildJunctionElements(
+        positioned,
+        graph.edges,
+        hiddenMemberIds,
+      )
+      setNodes([...positioned, ...junctionNodes])
+      setEdges([...spouseEdges, ...parentChildEdges])
+    } else {
+      setNodes(positioned)
+      setEdges(handledEdges)
+    }
+
     const timeout = setTimeout(() => fitView({ padding: 0.2, duration: 300 }), 350)
     return () => clearTimeout(timeout)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -137,11 +179,10 @@ function TreeCanvasInner({ treeId, graph, onSelectMember }: FamilyTreeCanvasProp
 
   const decoratedEdges = edges.map((edge) => ({
     ...edge,
-    animated: pathResult?.path.includes(edge.source) && pathResult?.path.includes(edge.target),
-    style:
-      pathResult?.path.includes(edge.source) && pathResult?.path.includes(edge.target)
-        ? { ...edge.style, stroke: 'var(--color-brand-600)', strokeWidth: 2.5 }
-        : edge.style,
+    animated: isEdgeOnPath(edge, pathResult?.path),
+    style: isEdgeOnPath(edge, pathResult?.path)
+      ? { ...edge.style, stroke: 'var(--color-brand-600)', strokeWidth: 2.5 }
+      : edge.style,
   }))
 
   return (

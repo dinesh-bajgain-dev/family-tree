@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import type { FamilyTree, TreeGraph } from '../types'
 import { graphApi, membersApi, treesApi } from '../lib/treeApi'
+import { useAuth } from '../context/AuthContext'
 import { FamilyTreeCanvas } from '../components/tree/FamilyTreeCanvas'
 import { Button } from '../components/ui/Button'
 import { Modal } from '../components/ui/Modal'
@@ -12,6 +13,7 @@ type MemberSubmitValues = MemberFormValues | FormData
 export function TreeViewPage() {
   const { treeId } = useParams<{ treeId: string }>()
   const navigate = useNavigate()
+  const { user } = useAuth()
   const [tree, setTree] = useState<FamilyTree | null>(null)
   const [graph, setGraph] = useState<TreeGraph | null>(null)
   const [isAddingMember, setIsAddingMember] = useState(false)
@@ -37,6 +39,8 @@ export function TreeViewPage() {
 
   if (!tree || !graph || !treeId) return <p className="text-sm text-ink-500">Loading…</p>
 
+  const isOwner = tree.owner === user?.id
+
   return (
     <div>
       <div className="mb-4 flex items-center justify-between">
@@ -45,14 +49,15 @@ export function TreeViewPage() {
             ← All trees
           </Link>
           <h1 className="text-2xl font-semibold">{tree.name}</h1>
+          {!isOwner && <p className="text-sm text-ink-500 dark:text-ink-400">Read-only — you're viewing someone else's tree.</p>}
         </div>
-        <Button onClick={() => setIsAddingMember(true)}>+ Add member</Button>
+        {isOwner && <Button onClick={() => setIsAddingMember(true)}>+ Add member</Button>}
       </div>
 
       {graph.nodes.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-ink-300 p-12 text-center text-ink-500 dark:border-ink-700">
-          <p className="mb-4">No members yet — add the first person in this tree.</p>
-          <Button onClick={() => setIsAddingMember(true)}>+ Add member</Button>
+          <p className="mb-4">No members yet{isOwner && ' — add the first person in this tree.'}</p>
+          {isOwner && <Button onClick={() => setIsAddingMember(true)}>+ Add member</Button>}
         </div>
       ) : (
         <FamilyTreeCanvas
@@ -62,9 +67,11 @@ export function TreeViewPage() {
         />
       )}
 
-      <Modal open={isAddingMember} onClose={() => setIsAddingMember(false)} title="Add a family member">
-        <MemberForm onSubmit={handleAddMember} submitLabel="Add member" />
-      </Modal>
+      {isOwner && (
+        <Modal open={isAddingMember} onClose={() => setIsAddingMember(false)} title="Add a family member">
+          <MemberForm onSubmit={handleAddMember} submitLabel="Add member" />
+        </Modal>
+      )}
     </div>
   )
 }

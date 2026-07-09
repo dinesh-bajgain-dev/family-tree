@@ -1,5 +1,6 @@
 import type { Edge, Node } from '@xyflow/react'
 import type { FamilyMember, GraphEdge } from '../../types'
+import { JUNCTION_SIZE } from './JunctionNode'
 
 export const NODE_WIDTH = 220
 export const NODE_HEIGHT = 96
@@ -49,7 +50,7 @@ export function toFlowElements(
             target: e.to_member,
             sourceHandle: 'bottom',
             targetHandle: 'top',
-            type: 'smoothstep',
+            type: 'step',
             animated: false,
             style: { stroke: 'var(--color-ink-300)' },
             data: { kind: e.kind },
@@ -76,8 +77,8 @@ export function assignSpouseHandles(nodes: Node[], edges: Edge[], layout: TreeLa
     const sourceX = xById.get(edge.source) ?? 0
     const targetX = xById.get(edge.target) ?? 0
     return sourceX <= targetX
-      ? { ...edge, sourceHandle: 'right', targetHandle: 'left' }
-      : { ...edge, sourceHandle: 'left', targetHandle: 'right' }
+      ? { ...edge, sourceHandle: 'right-source', targetHandle: 'left-target' }
+      : { ...edge, sourceHandle: 'left-source', targetHandle: 'right-target' }
   })
 }
 
@@ -88,6 +89,16 @@ export function assignSpouseHandles(nodes: Node[], edges: Edge[], layout: TreeLa
  * its cycle-breaking preprocessing silently drops the "same rank" constraint
  * a bidirectional zero-length edge is meant to express, so ranks are computed
  * by hand here instead.
+ *
+ * Horizontal (X) positions are then assigned bottom-up: the deepest
+ * generation lays out left-to-right in natural order first, and every
+ * shallower generation centers each parent/couple over the mean position of
+ * their own children (falling back to natural left-to-right placement for
+ * anyone with no children in the tree). This is what makes a couple's
+ * marriage line land centered over their children instead of the reverse —
+ * positioning children under a fixed parent spot, which only looks centered
+ * by coincidence and skews as soon as a child's own subtree (e.g. their
+ * spouse) pulls the group's width to one side.
  */
 export function applyDagreLayout(nodes: Node[], edges: Edge[], layout: TreeLayout): Node[] {
   const parentsOf = new Map<string, Set<string>>()
@@ -102,6 +113,14 @@ export function applyDagreLayout(nodes: Node[], edges: Edge[], layout: TreeLayou
     } else {
       if (!parentsOf.has(edge.target)) parentsOf.set(edge.target, new Set())
       parentsOf.get(edge.target)!.add(edge.source)
+    }
+  }
+
+  const childrenOf = new Map<string, Set<string>>()
+  for (const [child, parents] of parentsOf) {
+    for (const p of parents) {
+      if (!childrenOf.has(p)) childrenOf.set(p, new Set())
+      childrenOf.get(p)!.add(child)
     }
   }
 
@@ -144,10 +163,12 @@ export function applyDagreLayout(nodes: Node[], edges: Edge[], layout: TreeLayou
   for (const node of nodes) byRank[rank.get(node.id) ?? 0].push(node.id)
 
   // Group same-rank spouses into clusters so couples stay adjacent and are
-  // positioned/ordered as a single unit.
-  type Cluster = { ids: string[]; anchorX: number }
+  // positioned/ordered as a single unit. Grouping only depends on rank and
+  // spouse relationships, so it can be done up front for every rank, before
+  // any X positions exist yet.
+  type Cluster = { ids: string[]; originalIndex: number }
   const clustersByRank: Cluster[][] = []
-  const nodeCenterX = new Map<string, number>()
+  const originalIndex = new Map(nodes.map((n, i) => [n.id, i]))
 
   for (let r = 0; r <= maxRank; r++) {
     const visited = new Set<string>()
@@ -159,39 +180,50 @@ export function applyDagreLayout(nodes: Node[], edges: Edge[], layout: TreeLayou
       )
       const ids = [id, ...partners]
       ids.forEach((i) => visited.add(i))
+      clusters.push({ ids, originalIndex: Math.min(...ids.map((i) => originalIndex.get(i) ?? 0)) })
+    }
+    clustersByRank.push(clusters)
+  }
 
-      const parentXs = ids.flatMap((memberId) =>
-        [...(parentsOf.get(memberId) ?? [])]
-          .map((p) => nodeCenterX.get(p))
+  const nodeCenterX = new Map<string, number>()
+
+  // Bottom-up: the deepest rank has no children to center over, so it lays
+  // out in natural order; every rank above centers each cluster over its own
+  // children's mean position (already fixed, since we're going bottom-up),
+  // nudging right only if that would overlap the previous cluster.
+  for (let r = maxRank; r >= 0; r--) {
+    const clusters = clustersByRank[r]
+
+    const withDesired = clusters.map((cluster) => {
+      const childCenters = cluster.ids.flatMap((id) =>
+        [...(childrenOf.get(id) ?? [])]
+          .map((c) => nodeCenterX.get(c))
           .filter((x): x is number => x !== undefined),
       )
-      const anchorX = parentXs.length
-        ? parentXs.reduce((a, b) => a + b, 0) / parentXs.length
-        : Number.POSITIVE_INFINITY
-      clusters.push({ ids, anchorX })
-    }
-
-    // Order by anchor (average parent x) to keep children roughly under
-    // their parents; clusters with no parents (e.g. rank 0) keep insertion
-    // order via a stable sort.
-    const withIndex = clusters.map((c, i) => ({ c, i }))
-    withIndex.sort((a, b) => {
-      if (a.c.anchorX === b.c.anchorX) return a.i - b.i
-      if (!Number.isFinite(a.c.anchorX)) return a.i - b.i
-      if (!Number.isFinite(b.c.anchorX)) return a.i - b.i
-      return a.c.anchorX - b.c.anchorX
+      const desired = childCenters.length
+        ? childCenters.reduce((a, b) => a + b, 0) / childCenters.length
+        : null
+      return { cluster, desired }
     })
-    const ordered = withIndex.map(({ c }) => c)
-    clustersByRank.push(ordered)
+
+    withDesired.sort((a, b) => {
+      if (a.desired === null && b.desired === null) return a.cluster.originalIndex - b.cluster.originalIndex
+      if (a.desired === null) return 1
+      if (b.desired === null) return -1
+      if (a.desired === b.desired) return a.cluster.originalIndex - b.cluster.originalIndex
+      return a.desired - b.desired
+    })
 
     let cursor = 0
-    for (const cluster of ordered) {
+    for (const { cluster, desired } of withDesired) {
       const clusterWidth = cluster.ids.length * NODE_WIDTH + (cluster.ids.length - 1) * SPOUSE_GAP
+      const minCenter = cursor + clusterWidth / 2
+      const center = desired === null ? minCenter : Math.max(desired, minCenter)
+      const clusterStart = center - clusterWidth / 2
       cluster.ids.forEach((id, i) => {
-        const x = cursor + i * (NODE_WIDTH + SPOUSE_GAP) + NODE_WIDTH / 2
-        nodeCenterX.set(id, x)
+        nodeCenterX.set(id, clusterStart + i * (NODE_WIDTH + SPOUSE_GAP) + NODE_WIDTH / 2)
       })
-      cursor += clusterWidth + CLUSTER_GAP
+      cursor = clusterStart + clusterWidth + CLUSTER_GAP
     }
   }
 
@@ -205,4 +237,108 @@ export function applyDagreLayout(nodes: Node[], edges: Edge[], layout: TreeLayou
         : { x: centerY - NODE_HEIGHT / 2, y: centerX - NODE_WIDTH / 2 }
     return { ...node, position }
   })
+}
+
+function makeJunctionNode(id: string, centerX: number, centerY: number): Node {
+  return {
+    id,
+    type: 'junction',
+    position: { x: centerX - JUNCTION_SIZE / 2, y: centerY - JUNCTION_SIZE / 2 },
+    data: {},
+    draggable: false,
+    selectable: false,
+    zIndex: -1,
+  }
+}
+
+/**
+ * Builds, per distinct parent-set that has at least one child, a two-anchor
+ * chain: a "parent drop" positioned at the couple's marriage-line center
+ * (or a single parent's own center), and a "bus center" positioned at the
+ * horizontal midpoint of that couple's children. Connecting the two with one
+ * edge means the trunk still visibly originates from the parents, but the
+ * bus it feeds always splits into two equal halves across the children —
+ * rather than hanging off the parents' own point, which is only centered
+ * over the children by coincidence (e.g. it skews badly once one child's own
+ * subtree, like a spouse, pulls the group's width to one side).
+ *
+ * This replaces individual parent->child edges for rendering (vertical
+ * layout only). Children with a different recorded co-parent (e.g.
+ * half-siblings from a remarriage) land in a different group and get their
+ * own separate trunk+bus.
+ */
+export function buildJunctionElements(
+  positionedNodes: Node[],
+  graphEdges: GraphEdge[],
+  hiddenMemberIds: Set<string>,
+): { junctionNodes: Node[]; edges: Edge[] } {
+  const centerById = new Map(
+    positionedNodes.map((n) => [n.id, { x: n.position.x + NODE_WIDTH / 2, y: n.position.y + NODE_HEIGHT / 2 }]),
+  )
+
+  const parentsOfChild = new Map<string, Set<string>>()
+  for (const e of graphEdges) {
+    if (e.kind !== 'parent_child') continue
+    if (hiddenMemberIds.has(e.from_member) || hiddenMemberIds.has(e.to_member)) continue
+    if (!centerById.has(e.from_member) || !centerById.has(e.to_member)) continue
+    if (!parentsOfChild.has(e.to_member)) parentsOfChild.set(e.to_member, new Set())
+    parentsOfChild.get(e.to_member)!.add(e.from_member)
+  }
+
+  const groupByParentKey = new Map<string, { parentIds: string[]; childIds: string[] }>()
+  for (const [childId, parentSet] of parentsOfChild) {
+    const parentIds = [...parentSet].sort()
+    const key = parentIds.join('+')
+    if (!groupByParentKey.has(key)) groupByParentKey.set(key, { parentIds, childIds: [] })
+    groupByParentKey.get(key)!.childIds.push(childId)
+  }
+
+  const junctionNodes: Node[] = []
+  const edges: Edge[] = []
+
+  for (const [key, { parentIds, childIds }] of groupByParentKey) {
+    const parentCenters = parentIds.map((id) => centerById.get(id)!).filter(Boolean)
+    const childCenters = childIds.map((id) => centerById.get(id)!).filter(Boolean)
+    if (parentCenters.length === 0 || childCenters.length === 0) continue
+
+    const parentX = parentCenters.reduce((sum, c) => sum + c.x, 0) / parentCenters.length
+    const parentY = parentCenters.reduce((sum, c) => sum + c.y, 0) / parentCenters.length
+    const childXs = childCenters.map((c) => c.x)
+    const busX = (Math.min(...childXs) + Math.max(...childXs)) / 2
+    const childY = childCenters.reduce((sum, c) => sum + c.y, 0) / childCenters.length
+    const busY = (parentY + childY) / 2
+
+    const dropId = `junction-drop:${key}`
+    const busId = `junction-bus:${key}`
+    junctionNodes.push(makeJunctionNode(dropId, parentX, parentY))
+    junctionNodes.push(makeJunctionNode(busId, busX, busY))
+
+    edges.push({
+      id: `pc-stub:${key}`,
+      source: dropId,
+      target: busId,
+      sourceHandle: 'out',
+      targetHandle: 'in',
+      type: 'step',
+      animated: false,
+      style: { stroke: 'var(--color-ink-300)' },
+      data: { kind: 'parent_child', parentIds, childIds },
+    })
+
+    for (const childId of childIds) {
+      edges.push({
+        id: `pc:${key}->${childId}`,
+        source: busId,
+        target: childId,
+        sourceHandle: 'out',
+        targetHandle: 'top',
+        type: 'step',
+        animated: false,
+        style: { stroke: 'var(--color-ink-300)' },
+        data: { kind: 'parent_child', parentIds, childIds: [childId] },
+      })
+    }
+  }
+
+  return { junctionNodes, edges }
 }
