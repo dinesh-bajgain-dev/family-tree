@@ -16,13 +16,17 @@ DEBUG = config('DEBUG', default=True, cast=bool)
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1', cast=Csv())
 
 
+CLOUDINARY_CLOUD_NAME = config('CLOUDINARY_CLOUD_NAME', default='')
+
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
+    *(['cloudinary_storage'] if CLOUDINARY_CLOUD_NAME else []),
     'django.contrib.staticfiles',
+    *(['cloudinary'] if CLOUDINARY_CLOUD_NAME else []),
     'rest_framework',
     'rest_framework_simplejwt',
     'corsheaders',
@@ -94,6 +98,21 @@ MEDIA_URL = 'media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# Profile photos / cover images go to Cloudinary when credentials are
+# configured (see .env.example); otherwise they fall back to local disk
+# storage under MEDIA_ROOT, which is fine for local dev but not durable in
+# production (ephemeral filesystems, no CDN).
+if CLOUDINARY_CLOUD_NAME:
+    CLOUDINARY_STORAGE = {
+        'CLOUD_NAME': CLOUDINARY_CLOUD_NAME,
+        'API_KEY': config('CLOUDINARY_API_KEY'),
+        'API_SECRET': config('CLOUDINARY_API_SECRET'),
+    }
+    STORAGES = {
+        'default': {'BACKEND': 'cloudinary_storage.storage.MediaCloudinaryStorage'},
+        'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'},
+    }
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
